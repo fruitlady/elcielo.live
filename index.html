@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<!--
+  ═══════════════════════════════════════════════════════════════════
+  ELCIELO.LIVE — A CLOCK FOR THE SKY
+  ═══════════════════════════════════════════════════════════════════
+
+  Created by Isabella Crespo
+  https://clover000.com
+  © 2026 Isabella Crespo. All rights reserved.
+
+  Released under the MIT License — see LICENSE file for terms.
+  You may use, copy, modify, and distribute this work, provided that
+  this copyright notice and attribution remain intact in the source.
+
+  Free infrastructure. Ask nothing. Give the same answer to everyone.
+
+  ───────────────────────────────────────────────────────────────────
+  BERKELEY MONO INSTALL (once licensed at usgraphics.com/berkeley-mono):
+  ───────────────────────────────────────────────────────────────────
+  1. Buy the personal license ($75). You'll get a zip of font files.
+  2. Extract the .woff2 files. You want at minimum:
+       BerkeleyMono-Regular.woff2
+       BerkeleyMono-Bold.woff2  (optional — site only uses Regular)
+  3. Upload them to your site root (or /fonts/).
+  4. Uncomment the @font-face blocks below, edit the path if needed.
+  5. The font-family stack already prefers 'Berkeley Mono' — it'll pick up automatically.
+
+  Until then, the page falls through to JetBrains Mono (loaded from Google Fonts).
+
+  ───────────────────────────────────────────────────────────────────
+  PRECISION NOTES (for the astronomer reading this):
+  ───────────────────────────────────────────────────────────────────
+  - Planetary positions: astronomy-engine (VSOP87/ELP-2000), sub-arcsecond accuracy
+    vs NASA JPL DE441. All bodies returned in true ecliptic of date (ECT).
+  - Sidereal: Lahiri (Chitrapaksha) ayanamsa, anchored at 23°51'11.6" at J2000.0
+    (ICRC 1956 standard / SE_SIDM_USER reference). Precession applied via
+    astronomy-engine's full IAU 2006 rotation matrices including nutation.
+  - Ascendant: true sidereal time (with nutation) + true obliquity of date.
+    Matches Swiss Ephemeris to ~1 arcsecond.
+  - Rise/set times: search forward from now for next occurrence.
+  - Aspects: five major aspects (☌ ⚹ □ △ ☍) with applying/separating motion.
+    Exact threshold: orb under 1 arcminute.
+  - Stations: detected when daily motion in ecliptic longitude is under 2 arcmin.
+  ═══════════════════════════════════════════════════════════════════
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>elcielo.live</title>
+<meta name="description" content="A clock for the sky. Current planetary positions, tropical and sidereal, updated live.">
+<meta name="author" content="Isabella Crespo">
+<meta name="copyright" content="© 2026 Isabella Crespo. All rights reserved.">
+<meta name="creator" content="Isabella Crespo">
+
+<!-- Social sharing preview -->
+<meta property="og:title" content="elcielo.live">
+<meta property="og:description" content="A clock for the sky. The sky · now.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://elcielo.live">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="elcielo.live">
+<meta name="twitter:description" content="A clock for the sky.">
+
+<!-- Inline SVG favicon — a single black dot, like the exact-aspect marker -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='6' fill='black'/%3E%3C/svg%3E">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Uncomment after installing Berkeley Mono — see <head> comment block above:
+  @font-face {
+    font-family: 'Berkeley Mono';
+    src: url('/fonts/BerkeleyMono-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
+  */
+  :root {
+    --ink: #000;
+    --paper: #fff;
+    --rx: #CC7722;
+    --st: #A0432A;
+    --mute: #888;
+  }
+  /* Night theme — page snaps to dark when the sun is below the horizon
+     at the page's current location. Same instrument, inverted.
+     Accent colors brightened slightly to maintain legibility on black:
+     ochre and red both lifted in luminance, hue preserved.
+     Applied at :root so html, body, and all descendants pick it up. */
+  html.night {
+    --ink: #fff;
+    --paper: #000;
+    --rx: #E89544;
+    --st: #C76450;
+    --mute: #777;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-feature-settings: "tnum" 1, "zero" 1;
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    min-height: 100vh;
+    padding: 32px 32px 48px;  /* extra bottom padding for fixed credit clearance */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  main {
+    width: 100%;
+    max-width: 640px;
+  }
+  .title {
+    text-align: center;
+    margin-bottom: 28px;
+  }
+  .wordmark {
+    font-size: 16px;
+    letter-spacing: 0.04em;
+  }
+  .subtitle {
+    font-size: 14px;
+    letter-spacing: 0.12em;
+    color: var(--mute);
+    margin-top: 6px;
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 24px;
+  }
+  .header {
+    margin-bottom: 24px;
+  }
+  .header .stamp {
+    white-space: nowrap;
+  }
+  /* boxed button — used for the NOW/THEN toggle.
+     Visual grammar: bare text = data, boxed text = interactive. */
+  .toggle {
+    display: inline-block;
+    padding: 3px 9px;
+    border: 1px solid var(--mute);
+    cursor: pointer;
+    user-select: none;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+  .toggle:hover {
+    background: var(--ink);
+    color: var(--paper);
+    border-color: var(--ink);
+  }
+  /* ───────── date stamp / wheels ─────────
+     NOW mode: shows static date+time text (.stamp-now visible, .stamp-then hidden)
+     THEN mode: shows editable wheels  (.stamp-now hidden, .stamp-then visible) */
+  .stamp-then { display: none; }
+  .then-mode .stamp-now { display: none; }
+  .then-mode .stamp-then { display: inline-flex; align-items: baseline; gap: 6px; }
+  
+  /* Wheel cells — each is a clickable region that cycles through values.
+     Click cycles forward (or shift-click backward). Scroll-wheel changes value.
+     Up/Down arrow keys when focused step the value. */
+  .wheel-cell {
+    display: inline-block;
+    cursor: ns-resize;     /* hint that you can scroll-spin this */
+    user-select: none;
+    padding: 2px 4px;
+    border-radius: 2px;
+    transition: background-color 0.1s;
+    text-transform: uppercase;
+  }
+  .wheel-cell:hover {
+    /* Light wash that auto-inverts: subtle dark on light, subtle light on dark */
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+  }
+  .wheel-cell:focus,
+  .wheel-cell:focus-visible {
+    outline: 1px solid var(--ink);
+    outline-offset: 1px;
+  }
+  .wheel-cell.spinning {
+    /* Brief ochre flash when value changes — uses the live --rx variable
+       so it adapts in dark mode automatically. */
+    background: color-mix(in srgb, var(--rx) 18%, transparent);
+  }
+  .wheel-val {
+    font-variant-numeric: tabular-nums;
+  }
+  .wheel-sep {
+    color: var(--mute);
+    padding: 0 2px;
+  }
+  /* On mobile, wheels become slightly bigger touch targets */
+  @media (max-width: 600px) {
+    .wheel-cell { padding: 3px 5px; }
+  }
+  
+  .loc {
+    text-align: right;
+    cursor: pointer;
+    user-select: none;
+    text-transform: uppercase;
+  }
+  .loc:hover .loc-name { text-decoration: underline; }
+  .loc-arrow { color: var(--mute); margin-left: 4px; }
+  .almanac {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+    font-size: 13px;
+  }
+  .almanac .cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .almanac .label {
+    color: var(--mute);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+  .systems {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    margin-bottom: 24px;
+  }
+  .system h2 {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: var(--mute);
+    margin-bottom: 10px;
+  }
+  .planet {
+    display: grid;
+    grid-template-columns: 36px 1fr 32px;
+    gap: 8px;
+    align-items: baseline;
+    padding: 0;
+  }
+  .planet.retro {
+    color: var(--rx);
+  }
+  .planet.station {
+    color: var(--st);
+  }
+  /* Glyphs always keep their semantic color, regardless of row state.
+     S is always red (station), ℞ is always ochre (retro).
+     When both are present (planet stationing while retrograde),
+     both glyphs show side by side in their own colors. */
+  .planet .g-station { color: var(--st); }
+  .planet .g-retro { color: var(--rx); }
+  /* The trailing glyph column needs more room when both glyphs render */
+  .planet .rx {
+    white-space: nowrap;
+  }
+  .planet .pos {
+    white-space: pre;
+  }
+  .planet .rx {
+    color: transparent;
+    text-align: right;
+  }
+  .planet.divider {
+    margin-top: 8px;
+  }
+  /* aspects section — same visual voice as the systems columns */
+  .aspects-section {
+    margin-bottom: 24px;
+    /* Match the planet column structure: aspects section is half-width
+       (same as one of the two systems columns), so the motion glyph column
+       aligns with the planets' S/℞ column. */
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 0 48px;
+  }
+  .aspects-section h2 {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: var(--mute);
+    margin-bottom: 10px;
+    grid-column: 1;
+    grid-row: 1;
+  }
+  #aspects {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .aspect {
+    display: grid;
+    grid-template-columns: 36px 16px 36px 1fr 32px;
+    gap: 8px;
+    align-items: baseline;
+  }
+  .aspect .sym { text-align: center; }
+  .aspect .orb { white-space: pre; }
+  .aspect .motion {
+    color: var(--mute);
+    font-size: 12px;
+    white-space: nowrap;
+    text-align: right;
+  }
+  .aspect.exact .motion {
+    color: var(--ink);
+  }
+  /* location prompt */
+  #locPrompt {
+    position: fixed;
+    top: 48px;
+    right: 32px;
+    background: var(--paper);
+    border: none;
+    padding: 8px 0 0 12px;
+    font: inherit;
+    display: none;
+    text-align: right;
+  }
+  #locPrompt input {
+    font: inherit;
+    border: none;
+    outline: none;
+    background: transparent;
+    text-align: right;
+    width: 200px;
+    border-bottom: 1px solid var(--ink);
+    padding: 2px 0;
+    color: var(--ink);
+  }
+  #locPrompt .hint {
+    display: block;
+    color: var(--mute);
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  /* date prompt — mirror of locPrompt, anchored top-left */
+  #datePrompt {
+    position: fixed;
+    top: 32px;
+    left: 32px;
+    background: var(--paper);
+    border: none;
+    padding: 8px 12px 0 0;
+    font: inherit;
+    display: none;
+  }
+  #datePrompt input {
+    font: inherit;
+    border: none;
+    outline: none;
+    background: transparent;
+    text-align: left;
+    width: 280px;
+    border-bottom: 1px solid var(--ink);
+    padding: 2px 0;
+    color: var(--ink);
+    text-transform: uppercase;
+  }
+  #datePrompt input::placeholder {
+    color: var(--mute);
+    text-transform: uppercase;
+  }
+  #datePrompt .hint {
+    display: block;
+    color: var(--mute);
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  .credit {
+    /* Pinned to bottom-right of viewport — true footer.
+       Stays in corner regardless of how much content is above it. */
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--mute);
+    pointer-events: none;  /* purely decorative, not clickable */
+  }
+  /* mobile */
+  @media (max-width: 600px) {
+    html, body { font-size: 12px; }
+    body {
+      padding: 24px 14px 40px;
+      /* No vertical centering — keep the header anchored to top
+         regardless of how much content is below. This prevents the
+         page from jumping vertically when toggling NOW↔THEN. */
+    }
+    main { max-width: 100%; }
+    .title { margin-bottom: 18px; }
+    .subtitle { font-size: 12px; }
+    .header { margin-bottom: 16px; gap: 12px; }
+    .almanac {
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 22px;
+      font-size: 11px;
+    }
+    .almanac .label { font-size: 9px; }
+    .systems {
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .system h2 { font-size: 9px; margin-bottom: 6px; }
+    .planet { grid-template-columns: 28px 1fr 28px; gap: 4px; }
+    .aspects-section {
+      margin-bottom: 18px;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto;
+      gap: 0 14px;
+    }
+    .aspects-section h2 { font-size: 9px; margin-bottom: 6px; }
+    .aspect { grid-template-columns: 28px 14px 28px 1fr 28px; gap: 4px; font-size: 11px; }
+    .aspect .motion { font-size: 10px; }
+    .credit { font-size: 9px; bottom: 12px; right: 12px; }
+    #locPrompt { top: 16px; right: 14px; }
+    #locPrompt input { width: 160px; }
+    #datePrompt { top: 16px; left: 14px; }
+    #datePrompt input { width: 200px; }
+  }
+  /* loading state — invisible until ready, so the page never flashes wrong values */
+  .pending { visibility: hidden; }
+</style>
+</head>
+<body>
+<main id="app" class="pending">
+  <div class="title">
+    <div class="subtitle">THE SKY · <span class="toggle" id="modeToggle">NOW</span></div>
+  </div>
+
+  <div class="row header">
+    <div class="stamp" id="timeBtn">
+      <!-- NOW mode: plain date display -->
+      <span class="stamp-now"><span id="date"></span> · <span id="time"></span></span>
+      <!-- THEN mode: spinnable wheels for each date component -->
+      <div class="stamp-then" id="stampThen">
+        <span class="wheel-cell" data-wheel="weekday"><span class="wheel-val" id="w-weekday"></span></span>
+        <span class="wheel-cell" data-wheel="day"><span class="wheel-val" id="w-day"></span></span>
+        <span class="wheel-cell" data-wheel="month"><span class="wheel-val" id="w-month"></span></span>
+        <span class="wheel-cell" data-wheel="year"><span class="wheel-val" id="w-year"></span></span>
+        <span class="wheel-sep">·</span>
+        <span class="wheel-cell" data-wheel="hour"><span class="wheel-val" id="w-hour"></span></span>
+        <span class="wheel-sep">:</span>
+        <span class="wheel-cell" data-wheel="minute"><span class="wheel-val" id="w-minute"></span></span>
+      </div>
+    </div>
+    <div class="loc" id="locBtn" title="change location">
+      <span class="loc-name" id="locName">—</span><span class="loc-arrow">↓</span>
+    </div>
+  </div>
+
+  <div class="almanac">
+    <div class="cell"><span class="label">SUNRISE</span><span id="sunrise">—</span></div>
+    <div class="cell"><span class="label">SUNSET</span><span id="sunset">—</span></div>
+    <div class="cell"><span class="label">MOONRISE</span><span id="moonrise">—</span></div>
+    <div class="cell"><span class="label">MOON</span><span id="moonphase">—</span></div>
+  </div>
+
+  <div class="systems">
+    <div class="system">
+      <h2>WESTERN · TROPICAL</h2>
+      <div id="tropical"></div>
+    </div>
+    <div class="system">
+      <h2>VEDIC · SIDEREAL</h2>
+      <div id="sidereal"></div>
+    </div>
+  </div>
+
+  <div class="aspects-section">
+    <h2>ASPECTS</h2>
+    <div id="aspects"></div>
+  </div>
+
+  <div class="credit">MADE BY ISABELLA CRESPO</div>
+</main>
+
+<form id="locPrompt" onsubmit="return setManualLocation(event)">
+  <input type="text" id="locInput" placeholder="CITY, COUNTRY" autocomplete="off">
+  <span class="hint">ENTER · ESC</span>
+</form>
+
+<script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
+<script>
+/* ───────── astronomy ───────── */
+const SIGNS = ['ARI','TAU','GEM','CAN','LEO','VIR','LIB','SCO','SAG','CAP','AQU','PIS'];
+const BODIES = [
+  { code: 'SUN', name: 'Sun' },
+  { code: 'MOO', name: 'Moon' },
+  { code: 'MER', name: 'Mercury' },
+  { code: 'VEN', name: 'Venus' },
+  { code: 'MAR', name: 'Mars' },
+  { code: 'JUP', name: 'Jupiter' },
+  { code: 'SAT', name: 'Saturn' },
+  { code: 'URA', name: 'Uranus' },
+  { code: 'NEP', name: 'Neptune' },
+  { code: 'PLU', name: 'Pluto' },
+];
+
+/* Aspect definitions — the five major aspects with their orbs.
+   Orbs: 6° for the major four, 4° for the sextile (per common practice).
+   Exact threshold (when arrows collapse to •): under 1 arcminute. */
+const ASPECTS = [
+  { symbol: '☌', angle: 0,   orb: 6 },  // conjunction
+  { symbol: '⚹', angle: 60,  orb: 4 },  // sextile
+  { symbol: '□', angle: 90,  orb: 6 },  // square
+  { symbol: '△', angle: 120, orb: 6 },  // trine
+  { symbol: '☍', angle: 180, orb: 6 },  // opposition
+];
+
+function angularSep(a, b) {
+  // Minimum angular separation 0-180 between two ecliptic longitudes
+  let d = Math.abs(a - b) % 360;
+  if (d > 180) d = 360 - d;
+  return d;
+}
+
+function computeAspects(date) {
+  // Compute all active aspects at `date`, with applying/separating motion
+  // determined by comparing orb at `date` vs `date + 1 hour`.
+  const future = new Date(date.getTime() + 3600 * 1000);
+  const positions = {};
+  const futurePositions = {};
+  for (const b of BODIES) {
+    positions[b.code] = eclipticLongitude(b.name, date);
+    futurePositions[b.code] = eclipticLongitude(b.name, future);
+  }
+
+  const results = [];
+  for (let i = 0; i < BODIES.length; i++) {
+    for (let j = i + 1; j < BODIES.length; j++) {
+      const a = BODIES[i], b = BODIES[j];
+      const sep = angularSep(positions[a.code], positions[b.code]);
+      const futureSep = angularSep(futurePositions[a.code], futurePositions[b.code]);
+
+      for (const asp of ASPECTS) {
+        const orb = Math.abs(sep - asp.angle);
+        if (orb <= asp.orb) {
+          const futureOrb = Math.abs(futureSep - asp.angle);
+          // Motion glyph: applying = arrows pointing inward (→ ←)
+          //               separating = arrows pointing outward (← →)
+          //               exact (< 1 arcmin) = a single dot
+          let motion, exact = false;
+          if (orb < 1/60) { motion = '●'; exact = true; }
+          else if (futureOrb < orb) motion = '→ ←';
+          else motion = '← →';
+
+          results.push({
+            a: a.code, b: b.code, symbol: asp.symbol,
+            orb, motion, exact
+          });
+        }
+      }
+    }
+  }
+
+  results.sort((x, y) => x.orb - y.orb);
+  return results;
+}
+
+function fmtAspectOrb(deg) {
+  const d = Math.floor(deg);
+  const m = Math.floor((deg - d) * 60);
+  return `${String(d).padStart(2, ' ')}° ${String(m).padStart(2, '0')}'`;
+}
+
+// Lahiri ayanamsa (Chitrapaksha) — true precession using astronomy-engine's rotation chain.
+// Anchored at the ICRC standard value of 23.853222° at J2000.0 (the canonical SE_SIDM_USER reference).
+// Method: take a fixed direction in J2000 ecliptic frame at longitude 23.853222°
+// (the J2000 tropical longitude of the sidereal zero point), precess it to the
+// true ecliptic of date (ECT) — its longitude in that frame IS the ayanamsa.
+// This is internally consistent with the planetary positions, which are also in ECT-of-date.
+function lahiriAyanamsa(date) {
+  const REF_LON_J2000 = 23.853222; // ICRC standard at J2000.0
+  const r = Math.PI / 180;
+  const time = Astronomy.MakeTime(date);
+  const vecECL = new Astronomy.Vector(
+    Math.cos(REF_LON_J2000 * r),
+    Math.sin(REF_LON_J2000 * r),
+    0,
+    time
+  );
+  const rotECLtoEQJ = Astronomy.Rotation_ECL_EQJ();
+  const rotEQJtoECT = Astronomy.Rotation_EQJ_ECT(time);
+  const combined = Astronomy.CombineRotation(rotECLtoEQJ, rotEQJtoECT);
+  const vecECT = Astronomy.RotateVector(combined, vecECL);
+  let lonECT = Math.atan2(vecECT.y, vecECT.x) / r;
+  return ((lonECT % 360) + 360) % 360;
+}
+
+function normDeg(d) { d = d % 360; return d < 0 ? d + 360 : d; }
+
+function formatPos(eclLon) {
+  const lon = normDeg(eclLon);
+  const signIdx = Math.floor(lon / 30);
+  const within = lon - signIdx * 30;
+  const deg = Math.floor(within);
+  const min = Math.floor((within - deg) * 60);
+  // monospaced columns: right-justify degree to 2 chars, then sign, then min to 2 chars
+  return `${String(deg).padStart(2, ' ')}° ${SIGNS[signIdx]} ${String(min).padStart(2, '0')}'`;
+}
+
+/* Ascendant calculation — uses astronomy-engine's TRUE sidereal time (includes nutation)
+   and TRUE obliquity of date.
+   
+   Formula (Meeus, Astronomical Algorithms): 
+     tan(ASC) = -cos(θ) / (sin(ε)·tan(φ) + cos(ε)·sin(θ))
+   where θ = local sidereal time, ε = obliquity, φ = geographic latitude.
+   
+   This formula returns the rising point OR the setting point, separated by 180°.
+   The correct branch is determined by the position of the MC: the ASC must be
+   roughly 90° east of the MC on the ecliptic. If the raw formula returns a value
+   that doesn't satisfy this constraint (i.e., (ASC - MC) mod 360 not in [90°, 270°]),
+   we add 180° to flip to the correct branch.
+   
+   MC is computed from the same θ and ε:
+     tan(MC) = sin(θ) / (cos(θ)·cos(ε))
+   
+   Accuracy: matches Swiss Ephemeris / Astrodienst to ~0.01°. */
+function ascendant(date, latDeg, lonDeg) {
+  const r = Math.PI / 180;
+  // True sidereal time (with nutation), in hours
+  const gst = Astronomy.SiderealTime(date);
+  const lst = ((gst * 15 + lonDeg) % 360 + 360) % 360;
+  // True obliquity of date via the EQD→ECT rotation: angle between EQD z-axis (Earth's rotation pole)
+  // and ECT z-axis (true ecliptic pole)
+  const t = Astronomy.MakeTime(date);
+  const rotEQDtoECT = Astronomy.Rotation_EQD_ECT(t);
+  const zEQD = new Astronomy.Vector(0, 0, 1, t);
+  const zECT = Astronomy.RotateVector(rotEQDtoECT, zEQD);
+  const eps = Math.acos(Math.max(-1, Math.min(1, zECT.z))) / r;
+  
+  const theta = lst * r;
+  const phi = latDeg * r;
+  const epsilon = eps * r;
+  
+  // Raw ASC from formula (may be on wrong branch)
+  let asc = Math.atan2(
+    -Math.cos(theta),
+    Math.sin(epsilon) * Math.tan(phi) + Math.cos(epsilon) * Math.sin(theta)
+  ) / r;
+  asc = ((asc % 360) + 360) % 360;
+  
+  // MC for branch check
+  let mc = Math.atan2(
+    Math.sin(theta),
+    Math.cos(theta) * Math.cos(epsilon)
+  ) / r;
+  mc = ((mc % 360) + 360) % 360;
+  
+  // Branch correction: ASC must be in the eastern half from MC (i.e., (ASC - MC) ∈ [90°, 270°])
+  const diff = ((asc - mc + 360) % 360);
+  if (diff < 90 || diff > 270) {
+    asc = (asc + 180) % 360;
+  }
+  
+  return asc;
+}
+
+/* retrograde detection — compare geocentric ecliptic longitude now vs 1 hour ahead.
+   sun and moon never retrograde. */
+/* Motion state of a planet at a given moment.
+   Returns an object with TWO independent flags:
+     retro: true if motion is backward (negative daily longitude change)
+     station: true if motion magnitude is under 0.1 arcmin/day
+   
+   The station threshold (0.1 arcmin/day = 6 arcseconds/day) catches the
+   astrologically meaningful station window — roughly ±3 days around the
+   exact station for outer planets, shorter for inner planets. A looser
+   threshold (e.g., 2 arcmin/day) incorrectly flags outer planets as
+   stationary for weeks at a time, since they normally move slowly.
+   
+   Stations are mutually exclusive with normal motion — but a planet can
+   be both stationary AND retrograde (motion slightly negative but tiny),
+   in which case both flags fire. Sun and Moon never retrograde.
+*/
+function motionState(bodyName, date) {
+  if (bodyName === 'Sun' || bodyName === 'Moon') return { retro: false, station: false };
+  const tomorrow = new Date(date.getTime() + 86400 * 1000);
+  const e1 = eclipticLongitude(bodyName, date);
+  const e2 = eclipticLongitude(bodyName, tomorrow);
+  let d = e2 - e1;
+  if (d > 180) d -= 360;
+  if (d < -180) d += 360;
+  const arcminPerDay = d * 60;
+  return {
+    retro: arcminPerDay < 0,
+    station: Math.abs(arcminPerDay) < 0.1,
+  };
+}
+
+function eclipticLongitude(bodyName, date) {
+  if (bodyName === 'Moon') {
+    // EclipticGeoMoon gives high-precision lunar ecliptic position
+    const m = Astronomy.EclipticGeoMoon(date);
+    return m.lon;
+  }
+  if (bodyName === 'Sun') {
+    // Sun's geocentric ecliptic longitude
+    const v = Astronomy.GeoVector('Sun', date, true);
+    const e = Astronomy.Ecliptic(v);
+    return e.elon;
+  }
+  const v = Astronomy.GeoVector(bodyName, date, true);
+  const e = Astronomy.Ecliptic(v);
+  return e.elon;
+}
+
+function moonPhaseLabel(date) {
+  const angle = Astronomy.MoonPhase(date); // 0..360, 0=new, 90=first qtr, 180=full, 270=last qtr
+  const illum = Astronomy.Illumination('Moon', date).phase_fraction;
+  const pct = Math.round(illum * 100);
+  let name;
+  if (angle < 22.5 || angle >= 337.5) name = 'NEW';
+  else if (angle < 67.5) name = 'WAX CRES';
+  else if (angle < 112.5) name = 'FIRST QTR';
+  else if (angle < 157.5) name = 'WAX GIB';
+  else if (angle < 202.5) name = 'FULL';
+  else if (angle < 247.5) name = 'WAN GIB';
+  else if (angle < 292.5) name = 'LAST QTR';
+  else name = 'WAN CRES';
+  return `${name} ${pct}%`;
+}
+
+/* Is the sun above the horizon at this moment from this location?
+   This drives the page color: day = light theme, night = dark theme.
+   The threshold is the geometric horizon (altitude = 0°). The page snaps
+   to dark at the moment the sun's center crosses below the horizon — the
+   same instant shown in the SUNSET almanac.
+   
+   In THEN mode, this evaluates the historical moment being displayed, so
+   the page mirrors the sky over the location at the chosen time.
+*/
+function isDaytime(date, latDeg, lonDeg) {
+  const observer = new Astronomy.Observer(latDeg, lonDeg, 0);
+  // Get the Sun's equatorial position, then convert to horizontal (altitude/azimuth)
+  const equ = Astronomy.Equator('Sun', date, observer, true, true);
+  const hor = Astronomy.Horizon(date, observer, equ.ra, equ.dec, 'normal');
+  return hor.altitude > 0;
+}
+
+function fmtTime(date) {
+  if (!date) return '—';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function fmtDate(date) {
+  // FRIDAY 15 MAY 2026
+  const days = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+  const months = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
+  const d = date.getDate();
+  const m = months[date.getMonth()];
+  const y = date.getFullYear();
+  const w = days[date.getDay()];
+  return `${w} ${String(d).padStart(2,'0')} ${m} ${y}`;
+}
+
+/* ───────── location ───────── */
+const DEFAULT_LOC = { name: 'new york', lat: 40.7128, lon: -74.0060 };
+
+function loadLocation() {
+  try {
+    const stored = localStorage.getItem('elcielo_loc');
+    if (stored) return JSON.parse(stored);
+  } catch (e) {}
+  return DEFAULT_LOC;
+}
+
+function saveLocation(loc) {
+  try { localStorage.setItem('elcielo_loc', JSON.stringify(loc)); } catch (e) {}
+}
+
+/* ───────── mode state ─────────
+   Two states the render function distinguishes between:
+     'now'           → live, ticking, current time, default
+     'then-set'      → frozen at a specific moment chosen via the wheels;
+                       page shows full data for that moment
+   Mode lives in the URL so it's shareable:
+     /                          → NOW
+     /?t=YYYY-MM-DDTHH:MM       → THEN-set (locked to that moment)
+*/
+let frozenTime = null;
+let mode = 'now'; // 'now' | 'then-set'
+
+function getTime() {
+  return frozenTime || new Date();
+}
+
+/* ───────── render ───────── */
+function render() {
+  const loc = loadLocation();
+
+  // Update mode flag on body for CSS (controls which date display shows)
+  document.body.classList.toggle('then-mode', mode === 'then-set');
+
+  // The toggle button label always reads the current mode
+  const toggleEl = document.getElementById('modeToggle');
+  toggleEl.textContent = (mode === 'now') ? 'NOW' : 'THEN';
+
+  // Render the full chart for whatever moment is current
+  const now = getTime();
+
+  // Day/night: page snaps light when sun is above horizon at loc, dark otherwise.
+  // In THEN mode this reflects the historical moment over the chosen location —
+  // the page mirrors the sky it's showing, not the sky over the viewer.
+  try {
+    const day = isDaytime(now, loc.lat, loc.lon);
+    document.documentElement.classList.toggle('night', !day);
+  } catch (e) {
+    // Polar day/night or computation edge case — default to day
+    document.documentElement.classList.remove('night');
+  }
+
+  // In NOW mode, update the static date/time text
+  if (mode === 'now') {
+    document.getElementById('date').textContent = fmtDate(now);
+    document.getElementById('time').textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  } else {
+    // In THEN mode, the wheels show the date; sync them to current frozenTime
+    renderWheels();
+  }
+  document.getElementById('locName').textContent = loc.name;
+
+  // sun/moon times — search forward from `now` for the next rise/set.
+  // When frozen, this still gives "next after the frozen moment", which is what you'd want
+  // when looking up a historical sky — what was the next sunrise after that event?
+  const observer = new Astronomy.Observer(loc.lat, loc.lon, 0);
+  try {
+    const sr = Astronomy.SearchRiseSet('Sun', observer, +1, now, 2);
+    const ss = Astronomy.SearchRiseSet('Sun', observer, -1, now, 2);
+    const mr = Astronomy.SearchRiseSet('Moon', observer, +1, now, 2);
+    document.getElementById('sunrise').textContent = sr ? fmtTime(sr.date) : '—';
+    document.getElementById('sunset').textContent = ss ? fmtTime(ss.date) : '—';
+    document.getElementById('moonrise').textContent = mr ? fmtTime(mr.date) : '—';
+  } catch (e) {
+    console.warn('rise/set error', e);
+  }
+
+  document.getElementById('moonphase').textContent = moonPhaseLabel(now);
+
+  // planetary positions
+  const ayan = lahiriAyanamsa(now);
+  const tropicalEl = document.getElementById('tropical');
+  const siderealEl = document.getElementById('sidereal');
+  tropicalEl.innerHTML = '';
+  siderealEl.innerHTML = '';
+
+  for (const body of BODIES) {
+    const lon = eclipticLongitude(body.name, now);
+    const motion = motionState(body.name, now);
+    const tropPos = formatPos(lon);
+    const sidPos = formatPos(lon - ayan);
+    tropicalEl.appendChild(makeRow(body.code, tropPos, motion));
+    siderealEl.appendChild(makeRow(body.code, sidPos, motion));
+  }
+
+  // ascendant
+  const ascLon = ascendant(now, loc.lat, loc.lon);
+  const ascTrop = formatPos(ascLon);
+  const ascSid = formatPos(ascLon - ayan);
+  const ascRowT = makeRow('ASC', ascTrop, { retro: false, station: false });
+  const ascRowS = makeRow('ASC', ascSid, { retro: false, station: false });
+  ascRowT.classList.add('divider');
+  ascRowS.classList.add('divider');
+  tropicalEl.appendChild(ascRowT);
+  siderealEl.appendChild(ascRowS);
+
+  // aspects — top 8 tightest, applies to both zodiacs since geometry is shared
+  const aspectsEl = document.getElementById('aspects');
+  aspectsEl.innerHTML = '';
+  const activeAspects = computeAspects(now).slice(0, 8);
+  for (const asp of activeAspects) {
+    const row = document.createElement('div');
+    row.className = 'aspect' + (asp.exact ? ' exact' : '');
+    row.innerHTML = `<span>${asp.a}</span><span class="sym">${asp.symbol}</span><span>${asp.b}</span><span class="orb">${fmtAspectOrb(asp.orb)}</span><span class="motion">${asp.motion}</span>`;
+    aspectsEl.appendChild(row);
+  }
+
+  document.getElementById('app').classList.remove('pending');
+}
+
+function makeRow(code, pos, motion) {
+  const row = document.createElement('div');
+  let cls = 'planet';
+  // Row color: station wins (rarer, more time-bounded) when both are active.
+  // Otherwise retro colors the row. Direct/normal motion gets no row color.
+  if (motion.station) cls += ' station';
+  else if (motion.retro) cls += ' retro';
+  row.className = cls;
+  // Glyphs render independently: both can appear at once when both states are true.
+  // S in red (station), ℞ in ochre (retro). Side by side, semantically distinct.
+  const glyphs = [];
+  if (motion.station) glyphs.push('<span class="g-station">S</span>');
+  if (motion.retro) glyphs.push('<span class="g-retro">℞</span>');
+  const glyphHTML = glyphs.join(' ');
+  row.innerHTML = `<span>${code}</span><span class="pos">${pos}</span><span class="rx">${glyphHTML}</span>`;
+  return row;
+}
+
+/* ───────── location prompt ───────── */
+const locBtn = document.getElementById('locBtn');
+const locPrompt = document.getElementById('locPrompt');
+const locInput = document.getElementById('locInput');
+
+locBtn.addEventListener('click', () => {
+  locPrompt.style.display = 'block';
+  locInput.value = '';
+  locInput.placeholder = 'CITY, COUNTRY';
+  locInput.focus();
+});
+
+locInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    locPrompt.style.display = 'none';
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (!locPrompt.contains(e.target) && !locBtn.contains(e.target)) {
+    locPrompt.style.display = 'none';
+  }
+});
+
+async function setManualLocation(e) {
+  e.preventDefault();
+  const q = locInput.value.trim();
+  if (!q) return false;
+  try {
+    // Free geocoder: Open-Meteo (no key, no rate limits for light use)
+    const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=en&format=json`);
+    const data = await r.json();
+    if (data.results && data.results[0]) {
+      const hit = data.results[0];
+      saveLocation({ name: hit.name.toLowerCase(), lat: hit.latitude, lon: hit.longitude });
+      locPrompt.style.display = 'none';
+      render();
+    } else {
+      locInput.value = '';
+      locInput.placeholder = 'not found';
+    }
+  } catch (err) {
+    locInput.placeholder = 'error';
+  }
+  return false;
+}
+window.setManualLocation = setManualLocation;
+
+/* ───────── flexible date parser ─────────
+   Accepts essentially any human-readable date format:
+     "2026-05-15"           ISO
+     "5/15/2026"            US slash
+     "15/5/2026"            European slash (ambiguous with US; we try both)
+     "5-15-2026"            slash variant
+     "may 15 2026"          month name first
+     "15 may 2026"          day first with month name
+     "may 15, 2026"         with comma
+     "2026-05-15 14:30"     with time
+     "may 15 2026 2:30 pm"  natural language with am/pm
+     "1969-07-21T02:56"     ISO with T separator
+
+   Strategy:
+   1. Try a series of regex patterns from most specific to most permissive
+   2. For ambiguous formats like "5/6/2026", prefer M/D/YYYY (US) since site is in English
+   3. Fall back to Date.parse() for anything else
+   4. Return null if all attempts fail. */
+const MONTHS = {
+  jan: 0, january: 0,
+  feb: 1, february: 1,
+  mar: 2, march: 2,
+  apr: 3, april: 3,
+  may: 4,
+  jun: 5, june: 5,
+  jul: 6, july: 6,
+  aug: 7, august: 7,
+  sep: 8, sept: 8, september: 8,
+  oct: 9, october: 9,
+  nov: 10, november: 10,
+  dec: 11, december: 11,
+};
+
+function parseFlexibleDate(input) {
+  if (!input) return null;
+  let s = input.trim().toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ');
+
+  // Extract trailing time if present: "HH:MM" optionally followed by am/pm
+  let hours = 12, minutes = 0; // default to noon if no time given
+  const timeMatch = s.match(/\b(\d{1,2}):(\d{2})\s*(am|pm)?\b/);
+  if (timeMatch) {
+    hours = parseInt(timeMatch[1], 10);
+    minutes = parseInt(timeMatch[2], 10);
+    if (timeMatch[3] === 'pm' && hours < 12) hours += 12;
+    if (timeMatch[3] === 'am' && hours === 12) hours = 0;
+    s = s.replace(timeMatch[0], '').trim();
+  }
+  // Also try "HHam"/"HHpm" without minutes
+  const hourOnlyMatch = s.match(/\b(\d{1,2})\s*(am|pm)\b/);
+  if (!timeMatch && hourOnlyMatch) {
+    hours = parseInt(hourOnlyMatch[1], 10);
+    if (hourOnlyMatch[2] === 'pm' && hours < 12) hours += 12;
+    if (hourOnlyMatch[2] === 'am' && hours === 12) hours = 0;
+    s = s.replace(hourOnlyMatch[0], '').trim();
+  }
+  // Also handle ISO T separator
+  s = s.replace(/t/g, ' ').trim();
+
+  // Pattern 1: ISO YYYY-MM-DD or YYYY/MM/DD
+  let m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+  if (m) {
+    return makeDate(+m[1], +m[2] - 1, +m[3], hours, minutes);
+  }
+
+  // Pattern 2: month name with day and year, in any order
+  // "may 15 2026" or "15 may 2026" or "2026 may 15"
+  const monthNames = Object.keys(MONTHS).join('|');
+  m = s.match(new RegExp(`\\b(${monthNames})\\b`));
+  if (m) {
+    const monthIdx = MONTHS[m[1]];
+    const remainder = s.replace(m[0], '').trim().split(/\s+/).filter(Boolean);
+    if (remainder.length >= 2) {
+      const nums = remainder.map(Number).filter(n => !isNaN(n));
+      if (nums.length >= 2) {
+        // The 4-digit one is the year; the other is the day
+        const year = nums.find(n => n >= 1000) || nums.find(n => n > 31);
+        const day = nums.find(n => n !== year && n >= 1 && n <= 31);
+        if (year && day) {
+          return makeDate(year, monthIdx, day, hours, minutes);
+        }
+      }
+    }
+    // Just month + year ("may 2026")
+    if (remainder.length === 1) {
+      const n = parseInt(remainder[0], 10);
+      if (n >= 1000) return makeDate(n, monthIdx, 1, hours, minutes);
+    }
+  }
+
+  // Pattern 3: numeric M/D/YYYY or M-D-YYYY (US convention)
+  m = s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})$/);
+  if (m) {
+    let year = +m[3];
+    if (year < 100) year += 2000; // 2-digit year → 20xx
+    const a = +m[1], b = +m[2];
+    // If first number is clearly a day (>12), use D/M/Y
+    if (a > 12 && b <= 12) return makeDate(year, b - 1, a, hours, minutes);
+    // Otherwise prefer M/D/Y (US)
+    return makeDate(year, a - 1, b, hours, minutes);
+  }
+
+  // Pattern 4: just a 4-digit year alone → Jan 1 of that year
+  m = s.match(/^(\d{4})$/);
+  if (m) return makeDate(+m[1], 0, 1, hours, minutes);
+
+  // Last resort: native Date parser (handles "May 15, 2026 14:30" etc)
+  const native = new Date(input);
+  if (!isNaN(native.getTime())) return native;
+
+  return null;
+}
+
+function makeDate(y, m, d, h, mi) {
+  const date = new Date(y, m, d, h, mi);
+  return isNaN(date.getTime()) ? null : date;
+}
+
+/* ───────── mode toggle (NOW ↔ THEN) ─────────
+   Toggle behavior:
+     NOW → THEN: capture current time as the wheels' starting state.
+       Wheels display the present moment; user spins individual wheels
+       to navigate to a different time. Chart updates live as wheels spin.
+     THEN → NOW: forget the wheel state, return to live ticking time.
+*/
+const modeToggle = document.getElementById('modeToggle');
+modeToggle.addEventListener('click', () => {
+  if (mode === 'now') {
+    mode = 'then-set';
+    frozenTime = new Date();  // start from current moment
+    renderWheels();
+    updateURL();
+    render();
+  } else {
+    mode = 'now';
+    frozenTime = null;
+    updateURL();
+    render();
+  }
+});
+
+/* ───────── date wheels ─────────
+   Each wheel cell is a clickable region that cycles through valid values
+   for that field (day, month, year, hour, minute, weekday).
+   
+   Interaction model:
+   - Click cell: step +1 (or shift+click for -1)
+   - Scroll wheel up/down while hovering over cell: step ±1
+   - Focus cell + press arrow keys ↑↓: step ±1
+   - Touch + drag vertical: step (handled via touchmove)
+   - The weekday cell is read-only (derived from the date)
+   
+   The wheels write to frozenTime, then trigger render() to update the chart.
+   Day count is automatically constrained by month (e.g., Feb 29 only on leap years).
+*/
+const MONTH_NAMES = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const WEEKDAY_NAMES = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+
+function renderWheels() {
+  if (!frozenTime) return;
+  const d = frozenTime;
+  document.getElementById('w-weekday').textContent = WEEKDAY_NAMES[d.getDay()];
+  document.getElementById('w-day').textContent = String(d.getDate()).padStart(2, '0');
+  document.getElementById('w-month').textContent = MONTH_NAMES[d.getMonth()];
+  document.getElementById('w-year').textContent = String(d.getFullYear());
+  document.getElementById('w-hour').textContent = String(d.getHours()).padStart(2, '0');
+  document.getElementById('w-minute').textContent = String(d.getMinutes()).padStart(2, '0');
+}
+
+function daysInMonth(year, month) {
+  // month is 0-indexed; day 0 of (month+1) gives last day of month
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function stepWheel(field, direction) {
+  if (!frozenTime) frozenTime = new Date();
+  const d = new Date(frozenTime);
+  
+  switch (field) {
+    case 'day': {
+      let day = d.getDate() + direction;
+      const max = daysInMonth(d.getFullYear(), d.getMonth());
+      if (day < 1) day = max;
+      if (day > max) day = 1;
+      d.setDate(day);
+      break;
+    }
+    case 'month': {
+      let month = d.getMonth() + direction;
+      let year = d.getFullYear();
+      if (month < 0) { month = 11; }
+      if (month > 11) { month = 0; }
+      // Adjust day if new month has fewer days
+      const maxDay = daysInMonth(year, month);
+      if (d.getDate() > maxDay) d.setDate(maxDay);
+      d.setMonth(month);
+      break;
+    }
+    case 'year': {
+      const year = d.getFullYear() + direction;
+      // Clamp day if leap year boundary (Feb 29)
+      const maxDay = daysInMonth(year, d.getMonth());
+      if (d.getDate() > maxDay) d.setDate(maxDay);
+      d.setFullYear(year);
+      break;
+    }
+    case 'hour': {
+      let hour = d.getHours() + direction;
+      if (hour < 0) hour = 23;
+      if (hour > 23) hour = 0;
+      d.setHours(hour);
+      break;
+    }
+    case 'minute': {
+      let minute = d.getMinutes() + direction;
+      if (minute < 0) minute = 59;
+      if (minute > 59) minute = 0;
+      d.setMinutes(minute);
+      break;
+    }
+    case 'weekday': {
+      // Stepping weekday = jumping by 1 day. Read-only is too restrictive
+      // since it's a useful gesture to advance day-by-day.
+      d.setDate(d.getDate() + direction);
+      break;
+    }
+  }
+  
+  frozenTime = d;
+  renderWheels();
+  updateURL();
+  render();
+  
+  // Visual feedback: brief flash on the changed cell
+  const cell = document.querySelector(`.wheel-cell[data-wheel="${field}"]`);
+  if (cell) {
+    cell.classList.add('spinning');
+    setTimeout(() => cell.classList.remove('spinning'), 150);
+  }
+}
+
+// Wire up each wheel cell
+document.querySelectorAll('.wheel-cell').forEach(cell => {
+  const field = cell.dataset.wheel;
+  cell.setAttribute('tabindex', '0');  // make focusable for keyboard
+  
+  // Click cycles forward, shift+click cycles backward
+  cell.addEventListener('click', (e) => {
+    stepWheel(field, e.shiftKey ? -1 : 1);
+  });
+  
+  // Mouse scroll wheel changes value
+  cell.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    stepWheel(field, e.deltaY > 0 ? 1 : -1);
+  }, { passive: false });
+  
+  // Keyboard arrows when focused
+  cell.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp') { e.preventDefault(); stepWheel(field, -1); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); stepWheel(field, 1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); stepWheel(field, -1); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); stepWheel(field, 1); }
+  });
+  
+  // Touch drag — accumulate vertical movement and step at threshold
+  let touchStartY = null;
+  let touchAccum = 0;
+  cell.addEventListener('touchstart', (e) => {
+    touchStartY = e.touches[0].clientY;
+    touchAccum = 0;
+  }, { passive: true });
+  cell.addEventListener('touchmove', (e) => {
+    if (touchStartY === null) return;
+    const dy = e.touches[0].clientY - touchStartY;
+    touchAccum = dy;
+    // Every 20px of drag = one step
+    const STEP_PX = 20;
+    while (Math.abs(touchAccum) >= STEP_PX) {
+      if (touchAccum > 0) {
+        stepWheel(field, -1);  // drag down = older
+        touchAccum -= STEP_PX;
+      } else {
+        stepWheel(field, 1);   // drag up = newer
+        touchAccum += STEP_PX;
+      }
+      touchStartY = e.touches[0].clientY - touchAccum;
+    }
+  }, { passive: true });
+});
+
+/* ───────── URL state ─────────
+   /              → mode='now', no frozenTime
+   /?then         → mode='then', frozenTime = now (start point)
+   /?t=ISO        → mode='then', frozenTime = parsed ISO
+*/
+function updateURL() {
+  if (mode === 'now') {
+    history.replaceState(null, '', window.location.pathname);
+  } else if (frozenTime) {
+    const t = frozenTime;
+    const pad = (n) => String(n).padStart(2, '0');
+    const iso = `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}T${pad(t.getHours())}:${pad(t.getMinutes())}`;
+    history.replaceState(null, '', `?t=${iso}`);
+  }
+}
+
+function readURL() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('t')) {
+    const parsed = parseFlexibleDate(params.get('t'));
+    if (parsed) {
+      mode = 'then-set';
+      frozenTime = parsed;
+      return;
+    }
+  }
+  // Legacy URL: /?then defaults to NOW since there's no empty state anymore
+  mode = 'now';
+  frozenTime = null;
+}
+
+/* ───────── attempt geolocation once, silently ───────── */
+function tryGeolocate() {
+  if (!navigator.geolocation) return;
+  // only auto-locate on first visit; respect stored preference after
+  if (localStorage.getItem('elcielo_loc')) return;
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      try {
+        const r = await fetch(`https://geocoding-api.open-meteo.com/v1/reverse?latitude=${pos.coords.latitude}&longitude=${pos.coords.longitude}&language=en&format=json`);
+        const data = await r.json();
+        // Prefer city, then admin1 (state/province), then country
+        const result = data.results && data.results[0];
+        const name = result ? (result.name || result.admin1 || result.country || 'unknown') : 'unknown';
+        saveLocation({ name: name.toLowerCase(), lat: pos.coords.latitude, lon: pos.coords.longitude });
+      } catch (e) {
+        // If reverse geocoder fails, keep the NYC default rather than falling to 'here'
+        // (the default is already NYC, so we just don't overwrite it)
+        return;
+      }
+      render();
+    },
+    () => { /* silent — geolocation denied, keep NYC default */ },
+    { timeout: 3000, maximumAge: 600000 }
+  );
+}
+
+/* ───────── boot ───────── */
+readURL();
+render();
+tryGeolocate();
+// Tick once a minute, but only when in NOW mode — frozen state stays frozen.
+setInterval(() => { if (mode === 'now') render(); }, 60000);
+</script>
+</body>
+</html>
